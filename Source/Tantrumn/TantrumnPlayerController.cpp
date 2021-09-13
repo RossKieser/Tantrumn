@@ -2,6 +2,7 @@
 
 
 #include "TantrumnPlayerController.h"
+#include "TantrumnCharacterBase.h"
 #include "GameFramework/Character.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -96,17 +97,17 @@ void ATantrumnPlayerController::RequestCrouchEnd()
 
 void ATantrumnPlayerController::RequestSprintStart()
 {
-	if (GetCharacter())
+	if (ATantrumnCharacterBase* TantrumnCharacterBase = Cast<ATantrumnCharacterBase>(GetCharacter()))
 	{
-		GetCharacter()->GetCharacterMovement()->MaxWalkSpeed += SprintSpeed;
+		TantrumnCharacterBase->RequestSprintStart();
 	}
 }
 
 void ATantrumnPlayerController::RequestSprintEnd()
 {
-	if (GetCharacter())
+	if (ATantrumnCharacterBase* TantrumnCharacterBase = Cast<ATantrumnCharacterBase>(GetCharacter()))
 	{
-		GetCharacter()->GetCharacterMovement()->MaxWalkSpeed -= SprintSpeed;
+		TantrumnCharacterBase->RequestSprintEnd();
 	}
 }
 
