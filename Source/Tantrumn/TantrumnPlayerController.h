@@ -6,9 +6,9 @@
 #include "GameFramework/PlayerController.h"
 #include "TantrumnPlayerController.generated.h"
 
-/**
- * 
- */
+class ATantrumnGameModeBase;
+class UUserWidget;
+
 UCLASS()
 class TANTRUMN_API ATantrumnPlayerController : public APlayerController
 {
@@ -17,10 +17,16 @@ public:
 protected:
 	 void SetupInputComponent() override;
 
+	 virtual void BeginPlay() override;
+
 	 void RequestMoveForward(float AxisValue);
 	 void RequestMoveRight(float AxisValue);
 	 void RequestLookUp(float AxisValue);
 	 void RequestLookRight(float AxisValue);
+	 void RequestThrowObject(float AxisValue);
+
+	 void RequestPullObject();
+	 void RequestStopPullObject();
 
 	 void RequestJump();
 	 void RequestStopJump();
@@ -38,6 +44,13 @@ protected:
 	 // Base lookright rate, in deg/sec. Other Scaling may affect final lookright rate.
 	 UPROPERTY(EditAnywhere, Category = "Look")
 	 float BaseLookRightRate = 90.0f; 
+
+	 ATantrumnGameModeBase* GameModeRef;
+
+	 float LastAxis = 0.0f;
+
+	 UPROPERTY(EditAnywhere, Category = "Input")
+	 float FlickThreshold = 0.75f;
 
 };
 
