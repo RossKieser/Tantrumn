@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Sound/SoundCue.h"
 #include "TantrumnPlayerController.generated.h"
 
 class ATantrumnGameModeBase;
@@ -14,10 +15,10 @@ class TANTRUMN_API ATantrumnPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 public:
+	virtual void BeginPlay() override;
+
 protected:
 	 void SetupInputComponent() override;
-
-	 virtual void BeginPlay() override;
 
 	 void RequestMoveForward(float AxisValue);
 	 void RequestMoveRight(float AxisValue);
@@ -44,6 +45,9 @@ protected:
 	 // Base lookright rate, in deg/sec. Other Scaling may affect final lookright rate.
 	 UPROPERTY(EditAnywhere, Category = "Look")
 	 float BaseLookRightRate = 90.0f; 
+
+	 UPROPERTY(EditAnywhere, Category = "Sound")
+	 USoundCue* JumpSound = nullptr;
 
 	 ATantrumnGameModeBase* GameModeRef;
 
