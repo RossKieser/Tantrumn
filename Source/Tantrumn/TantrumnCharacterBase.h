@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Sound/SoundCue.h"
 #include "Animation/AnimMontage.h"
+#include "InteractInterface.h"
 #include "TantrumnCharacterBase.generated.h"
 
 
@@ -23,7 +24,7 @@ enum class ECharacterThrowState : uint8
 };
 
 UCLASS()
-class TANTRUMN_API ATantrumnCharacterBase : public ACharacter
+class TANTRUMN_API ATantrumnCharacterBase : public ACharacter, public IInteractInterface
 {
 	GENERATED_BODY()
 
@@ -46,6 +47,7 @@ public:
 	void RequestPullObject();
 	void RequestStopPullObject();
 	void ResetThrowableObject();
+	void RequestUseObject();
 
 	void OnThrowableAttached(AThrowableActor* InThrowableActor);
 
@@ -68,6 +70,29 @@ protected:
 	void SphereCastActorTransform();
 	void LineCastActorTransform();
 	void ProcessTraceResult(const FHitResult& HitResult);
+
+
+	UFUNCTION(Server, Reliable)
+	void ServerPullObject(AThrowableActor* InThrowableActor);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestPullObject(bool bIsPulling);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRequestThrowObject();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastRequestThrowObject();
+
+	UFUNCTION(Client, Reliable)
+	void ClientThrowableAttached(AThrowableActor* InThrowableActor);
+
+	UFUNCTION(Server, Reliable)
+	void ServerBeginThrow();
+
+	UFUNCTION(Server, Reliable)
+	void ServerFinishThrow();
+
 
 	bool PlayThrowMontage();
 	void UnbindMontage();
@@ -112,8 +137,12 @@ protected:
 	void OnStunBegin(float StunRatio);
 	void OnStunEnd();
 
-	UPROPERTY(VisibleAnywhere, Category = "Throw")
+
+	UPROPERTY(VisibleAnywhere, ReplicatedUsing = OnRep_CharacterThrowState, Category = "Throw")
 	ECharacterThrowState CharacterThrowState = ECharacterThrowState::None;
+
+	UFUNCTION()
+	void OnRep_CharacterThrowState(const ECharacterThrowState& OldCharacterThrowState);
 
 	UPROPERTY(EditAnywhere, Category = "Throw", meta = (ClampMin = "0.0", Unit = "ms"))
 	float ThrowSpeed = 2000.0f;
@@ -129,5 +158,17 @@ private:
 
 	UPROPERTY()
 	AThrowableActor* ThrowableActor;
+
+	void ApplyEffect_Implementation(EEffectType EffectType, bool bIsBuff) override;
+
+	void EndEffect();
+
+	bool bIsUnderEffect = false;
+	bool bIsEffectBuff = false;
+
+	float DefautlEffectCooldown = 5.0f;
+	float EffectCooldown = 0.0f;
+
+	EEffectType CurrentEffect = EEffectType::None;
 
 };

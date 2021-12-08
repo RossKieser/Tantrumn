@@ -20,6 +20,26 @@ void ATantrumnPlayerController::BeginPlay()
 	GameModeRef = Cast<ATantrumnGameModeBase>(GetWorld()->GetAuthGameMode());
 }
 
+void ATantrumnPlayerController::ReceivedPlayer()
+{
+	Super::ReceivedPlayer();
+	GameModeRef = GetWorld()->GetAuthGameMode<ATantrumnGameModeBase>();
+	if (ensureMsgf(GameModeRef, TEXT("ATantrumnPlayerController::ReceivedPlayer missing GameMode Reference")))
+	{
+		GameModeRef->ReceivePlayer(this);
+	}
+
+	if (HUDClass)
+	{
+		HUDWidget = CreateWidget(this, HUDClass);
+		if (HUDWidget)
+		{
+			//HUDWidget->AddToViewport();
+			HUDWidget->AddToPlayerScreen();
+		}
+	}
+}
+
 void ATantrumnPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
@@ -97,7 +117,14 @@ void ATantrumnPlayerController::RequestThrowObject(float AxisValue)
 			const bool IsFlick = fabs(currentDelta) > FlickThreshold;
 			if (IsFlick)
 			{
-				TantrumnCharacterBase->RequestThrowObject();
+				if (AxisValue > 0)
+				{
+					TantrumnCharacterBase->RequestThrowObject();
+				}
+				else
+				{
+					TantrumnCharacterBase->RequestUseObject();
+				}
 			}
 		}
 		else
@@ -122,6 +149,7 @@ void ATantrumnPlayerController::RequestStopPullObject()
 		TantrumnCharacterBase->RequestStopPullObject();
 	}
 }
+
 
 void ATantrumnPlayerController::RequestJump()
 {

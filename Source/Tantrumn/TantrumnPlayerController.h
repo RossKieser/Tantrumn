@@ -16,6 +16,7 @@ class TANTRUMN_API ATantrumnPlayerController : public APlayerController
 	GENERATED_BODY()
 public:
 	virtual void BeginPlay() override;
+	virtual void ReceivedPlayer() override;
 
 protected:
 	 void SetupInputComponent() override;
@@ -37,6 +38,11 @@ protected:
 
 	 void RequestSprintStart();
 	 void RequestSprintEnd();
+
+	 UPROPERTY(EditAnywhere, Category = "HUD")
+	 TSubclassOf<class UUserWidget> HUDClass;
+	 UPROPERTY()
+	 UUserWidget* HUDWidget;
 
 	 // Base lookup rate, in deg/sec. Other scaling may affect final lookup rate.
 	 UPROPERTY(EditAnywhere, Category = "Look")

@@ -4,6 +4,7 @@
 #include "TantrumnCharacterBase.h"
 #include "TantrumnPlayerController.h"
 #include "GameFramework/Controller.h"
+#include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TantrumnPlayerController.h"
@@ -45,13 +46,28 @@ ATantrumnCharacterBase::ATantrumnCharacterBase()
 {
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
 
+}
+
+void ATantrumnCharacterBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty >& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	FDoRepLifetimeParams SharedParams;
+	SharedParams.bIsPushBased = true;
+	SharedParams.Condition = COND_SkipOwner;
+
+	DOREPLIFETIME_WITH_PARAMS_FAST(ATantrumnCharacterBase, CharacterThrowState, SharedParams);
+
+	//DOREPLIFETIME(ATantrumnCharacterBase, CharacterThrowState);
 }
 
 // Called when the game starts or when spawned
 void ATantrumnCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
+	EffectCooldown = DefautlEffectCooldown;
 	if (GetCharacterMovement())
 	{
 		MaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
@@ -139,22 +155,21 @@ void ATantrumnCharacterBase::ProcessTraceResult(const FHitResult& HitResult)
 	const bool IsValidTarget = HitThrowableActor && HitThrowableActor->IsIdle();
 
 	//clean up old actor
-	if (ThrowableActor)
+	if (ThrowableActor && (!IsValidTarget || !IsSameActor))
 	{
-		if (!IsValidTarget || !IsSameActor)
-		{
-			ThrowableActor->ToggleHighlight(false);
-			ThrowableActor = nullptr;
-		}
+		ThrowableActor->ToggleHighlight(false);
+		ThrowableActor = nullptr;
 	}
 
-	if (IsValidTarget)
+	if (!IsValidTarget)
 	{
-		if (!ThrowableActor)
-		{
-			ThrowableActor = HitThrowableActor;
-			ThrowableActor->ToggleHighlight(true);
-		}
+		return;
+	}
+	
+	if (!IsSameActor)
+	{
+		ThrowableActor = HitThrowableActor;
+		ThrowableActor->ToggleHighlight(true);
 	}
 
 	if (CharacterThrowState == ECharacterThrowState::RequestingPull)
@@ -162,63 +177,81 @@ void ATantrumnCharacterBase::ProcessTraceResult(const FHitResult& HitResult)
 		//don't allow for pulling objects while running/jogging
 		if (GetVelocity().SizeSquared() < 100.0f)
 		{
-			if (ThrowableActor && ThrowableActor->Pull(this))
-			{
-				CharacterThrowState = ECharacterThrowState::Pulling;
-				ThrowableActor = nullptr;
-			}
+			ServerPullObject(ThrowableActor);
+			//PullObject(ThrowableActor);
+			ThrowableActor->ToggleHighlight(false);
+			//ThrowableActor = nullptr;
 		}
 	}
 }
 
-bool ATantrumnCharacterBase::PlayThrowMontage()
+void ATantrumnCharacterBase::ServerPullObject_Implementation(AThrowableActor* InThrowableActor)
 {
-	const float PlayRate = 1.0f;
-	bool bPlayedSuccessfully = PlayAnimMontage(ThrowMontage, PlayRate) > 0.f;
-	if (bPlayedSuccessfully)
+	if (InThrowableActor && InThrowableActor->Pull(this))
 	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-
-		if (!BlendingOutDelegate.IsBound())
-		{
-			BlendingOutDelegate.BindUObject(this, &ATantrumnCharacterBase::OnMontageBlendingOut);
-		}
-		AnimInstance->Montage_SetBlendingOutDelegate(BlendingOutDelegate, ThrowMontage);
-
-		if (!MontageEndedDelegate.IsBound())
-		{
-			MontageEndedDelegate.BindUObject(this, &ATantrumnCharacterBase::OnMontageEnded);
-		}
-		AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, ThrowMontage);
-
-		AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(this, &ATantrumnCharacterBase::OnNotifyBeginReceived);
-		AnimInstance->OnPlayMontageNotifyEnd.AddDynamic(this, &ATantrumnCharacterBase::OnNotifyEndReceived);
-
+		CharacterThrowState = ECharacterThrowState::Pulling;
+		ThrowableActor = InThrowableActor;
+		ThrowableActor->ToggleHighlight(false);
 	}
-
-	return bPlayedSuccessfully;
 }
 
-void ATantrumnCharacterBase::UnbindMontage()
+void ATantrumnCharacterBase::ServerRequestPullObject_Implementation(bool bIsPulling)
 {
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	CharacterThrowState = bIsPulling ? ECharacterThrowState::RequestingPull : ECharacterThrowState::None;
+}
+
+void ATantrumnCharacterBase::ServerRequestThrowObject_Implementation()
+{
+	//server needs to call the multicast
+	MulticastRequestThrowObject();
+}
+
+void ATantrumnCharacterBase::MulticastRequestThrowObject_Implementation()
+{
+	//locally controlled actor has already set up binding and played montage
+	if (IsLocallyControlled())
 	{
-		AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ATantrumnCharacterBase::OnNotifyBeginReceived);
-		AnimInstance->OnPlayMontageNotifyEnd.RemoveDynamic(this, &ATantrumnCharacterBase::OnNotifyEndReceived);
-		MontageEndedDelegate.Unbind();
-		BlendingOutDelegate.Unbind();
+		return;
+	}
+
+	PlayThrowMontage();
+	CharacterThrowState = ECharacterThrowState::Throwing;
+}
+
+void ATantrumnCharacterBase::ClientThrowableAttached_Implementation(AThrowableActor* InThrowableActor)
+{
+	CharacterThrowState = ECharacterThrowState::Attached;
+	ThrowableActor = InThrowableActor;
+	MoveIgnoreActorAdd(ThrowableActor);
+}
+
+void ATantrumnCharacterBase::ServerBeginThrow_Implementation()
+{
+	//ignore collisions otherwise the throwable object hits the player capsule and doesn't travel in the desired direction
+	if (ThrowableActor->GetRootComponent())
+	{
+		UPrimitiveComponent* RootPrimitiveComponent = Cast<UPrimitiveComponent>(ThrowableActor->GetRootComponent());
+		if (RootPrimitiveComponent)
+		{
+			RootPrimitiveComponent->IgnoreActorWhenMoving(this, true);
+		}
+	}
+	//const FVector& Direction = GetMesh()->GetSocketRotation(TEXT("ObjectAttach")).Vector() * -ThrowSpeed;
+	const FVector& Direction = GetActorForwardVector() * ThrowSpeed;
+	ThrowableActor->Launch(Direction);
+
+	if (CVarDisplayThrowVelocity->GetBool())
+	{
+		const FVector& Start = GetMesh()->GetSocketLocation(TEXT("ObjectAttach"));
+		DrawDebugLine(GetWorld(), Start, Start + Direction, FColor::Red, false, 5.0f);
 	}
 }
 
-void ATantrumnCharacterBase::OnMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+void ATantrumnCharacterBase::ServerFinishThrow_Implementation()
 {
-
-}
-
-void ATantrumnCharacterBase::OnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
-{
-	UnbindMontage();
+	//put all this in a function that runs on the server
 	CharacterThrowState = ECharacterThrowState::None;
+	//this only happened on the locally controlled actor
 	MoveIgnoreActorRemove(ThrowableActor);
 	if (ThrowableActor->GetRootComponent())
 	{
@@ -231,29 +264,65 @@ void ATantrumnCharacterBase::OnMontageEnded(UAnimMontage* Montage, bool bInterru
 	ThrowableActor = nullptr;
 }
 
-void ATantrumnCharacterBase::OnNotifyBeginReceived(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointNotifyPayload)
+bool ATantrumnCharacterBase::PlayThrowMontage()
 {
-	//ignore collisions otherwise the throwable object hits the player capsule and doesn't travel in the desired direction
-	if (ThrowableActor)
+	const float PlayRate = 1.0f;
+	bool bPlayedSuccessfully = PlayAnimMontage(ThrowMontage, PlayRate) > 0.f;
+	if (bPlayedSuccessfully)
 	{
-		if (ThrowableActor->GetRootComponent())
+		if (IsLocallyControlled())
 		{
-			UPrimitiveComponent* RootPrimitiveComponent = Cast<UPrimitiveComponent>(ThrowableActor->GetRootComponent());
-			if (RootPrimitiveComponent)
+			UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+			if (!BlendingOutDelegate.IsBound())
 			{
-				RootPrimitiveComponent->IgnoreActorWhenMoving(this, true);
+				BlendingOutDelegate.BindUObject(this, &ATantrumnCharacterBase::OnMontageBlendingOut);
 			}
-		}
-		//const FVector& Direction = GetMesh()->GetSocketRotation(TEXT("ObjectAttach")).Vector() * -ThrowSpeed;
-		const FVector& Direction = GetActorForwardVector() * ThrowSpeed;
-		ThrowableActor->Launch(Direction);
+			AnimInstance->Montage_SetBlendingOutDelegate(BlendingOutDelegate, ThrowMontage);
 
-		if (CVarDisplayThrowVelocity->GetBool())
-		{
-			const FVector& Start = GetMesh()->GetSocketLocation(TEXT("ObjectAttach"));
-			DrawDebugLine(GetWorld(), Start, Start + Direction, FColor::Red, false, 5.0f);
+			if (!MontageEndedDelegate.IsBound())
+			{
+				MontageEndedDelegate.BindUObject(this, &ATantrumnCharacterBase::OnMontageEnded);
+			}
+			AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, ThrowMontage);
+
+			AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(this, &ATantrumnCharacterBase::OnNotifyBeginReceived);
+			AnimInstance->OnPlayMontageNotifyEnd.AddDynamic(this, &ATantrumnCharacterBase::OnNotifyEndReceived);
 		}
 	}
+	return bPlayedSuccessfully;
+}
+
+void ATantrumnCharacterBase::UnbindMontage()
+{
+	if (IsLocallyControlled())
+	{
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ATantrumnCharacterBase::OnNotifyBeginReceived);
+			AnimInstance->OnPlayMontageNotifyEnd.RemoveDynamic(this, &ATantrumnCharacterBase::OnNotifyEndReceived);
+		}
+	}
+}
+
+void ATantrumnCharacterBase::OnMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+
+}
+
+void ATantrumnCharacterBase::OnMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (IsLocallyControlled())
+	{
+		UnbindMontage();
+	}
+	CharacterThrowState = ECharacterThrowState::None;
+	ServerFinishThrow();
+	ThrowableActor = nullptr;
+}
+
+void ATantrumnCharacterBase::OnNotifyBeginReceived(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointNotifyPayload)
+{
+	ServerBeginThrow();
 }
 
 void ATantrumnCharacterBase::OnNotifyEndReceived(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointNotifyPayload)
@@ -265,6 +334,10 @@ void ATantrumnCharacterBase::OnNotifyEndReceived(FName NotifyName, const FBranch
 void ATantrumnCharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
 	if (bIsStunned)
 	{
 		bIsStunned = (FApp::GetCurrentTime() - StunBeginTimestamp) < StunTime;
@@ -273,6 +346,21 @@ void ATantrumnCharacterBase::Tick(float DeltaTime)
 			OnStunEnd();
 		}
 	}
+
+	if (bIsUnderEffect)
+	{
+		if (EffectCooldown > 0)
+		{
+			EffectCooldown -= DeltaTime;
+		}
+		else
+		{
+			bIsUnderEffect = false;
+			EffectCooldown = DefautlEffectCooldown;
+			EndEffect();
+		}
+	}
+
 	if (CharacterThrowState == ECharacterThrowState::Throwing)
 	{
 		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
@@ -358,6 +446,7 @@ void ATantrumnCharacterBase::RequestThrowObject()
 		if (PlayThrowMontage())
 		{
 			CharacterThrowState = ECharacterThrowState::Throwing;
+			ServerRequestThrowObject();
 		}
 		else
 		{
@@ -372,6 +461,7 @@ void ATantrumnCharacterBase::RequestPullObject()
 	if (!bIsStunned && CharacterThrowState == ECharacterThrowState::None)
 	{
 		CharacterThrowState = ECharacterThrowState::RequestingPull;
+		ServerRequestPullObject(true);
 	}
 }
 
@@ -381,7 +471,8 @@ void ATantrumnCharacterBase::RequestStopPullObject()
 	if (CharacterThrowState == ECharacterThrowState::RequestingPull)
 	{
 		CharacterThrowState = ECharacterThrowState::None;
-		ResetThrowableObject();
+		ServerRequestPullObject(false);
+		//ResetThrowableObject();
 	}
 }
 
@@ -399,11 +490,19 @@ void ATantrumnCharacterBase::ResetThrowableObject()
 	ThrowableActor = nullptr;
 }
 
+void ATantrumnCharacterBase::RequestUseObject()
+{
+	ApplyEffect_Implementation(ThrowableActor->GetEffectType(), true);
+	ThrowableActor->Destroy();
+	ResetThrowableObject();
+}
+
 void ATantrumnCharacterBase::OnThrowableAttached(AThrowableActor* InThrowableActor)
 {
 	CharacterThrowState = ECharacterThrowState::Attached;
 	ThrowableActor = InThrowableActor;
 	MoveIgnoreActorAdd(ThrowableActor);
+	ClientThrowableAttached(InThrowableActor);
 }
 
 
@@ -430,3 +529,57 @@ void ATantrumnCharacterBase::OnStunEnd()
 	StunTime = 0.0f;
 
 }
+
+void ATantrumnCharacterBase::OnRep_CharacterThrowState(const ECharacterThrowState& OldCharacterThrowState)
+{
+	if (CharacterThrowState != OldCharacterThrowState)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("OldThrowState: %s"), *UEnum::GetDisplayValueAsText(OldCharacterThrowState).ToString());
+		UE_LOG(LogTemp, Warning, TEXT("CharacterThrowState: %s"), *UEnum::GetDisplayValueAsText(CharacterThrowState).ToString());
+	}
+}
+
+void ATantrumnCharacterBase::EndEffect()
+{
+	bIsUnderEffect = false;
+	switch (CurrentEffect)
+	{
+	case EEffectType::Speed:
+		bIsEffectBuff ? SprintSpeed /= 2, RequestSprintEnd() : GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		break;
+	case EEffectType::Jump:
+		// Implement Jump Buff/Debuff
+		break;
+	case EEffectType::Power:
+		// Implement Power Buff/Debuff
+		break;
+	default:
+		break;
+	}
+}
+
+void ATantrumnCharacterBase::ApplyEffect_Implementation(EEffectType EffectType, bool bIsBuff)
+{
+	if (bIsUnderEffect) return;
+
+	CurrentEffect = EffectType;
+	bIsUnderEffect = true;
+	bIsEffectBuff = bIsBuff;
+
+	switch (CurrentEffect)
+	{
+	case EEffectType::Speed:
+		bIsEffectBuff ? SprintSpeed *= 2 : GetCharacterMovement()->DisableMovement();
+		break;
+	case EEffectType::Jump:
+		// Implement Jump Buff/Debuff
+		break;
+	case EEffectType::Power:
+		// Implement Power Buff/Debuff
+		break;
+	default:
+		break;
+	}
+}
+
+

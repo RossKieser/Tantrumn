@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "InteractInterface.h"
 #include "TantrumnCharacterBase.h"
 
 // Sets default values
@@ -12,6 +13,8 @@ AThrowableActor::AThrowableActor()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
+	bReplicates = true;
+	SetReplicateMovement(true);
 	StaticMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>("StaticMeshComponent");
 	ProjectileMovementComponent = CreateDefaultSubobject<UProjectileMovementComponent>("ProjectileMovementComponent");
 	RootComponent = StaticMeshComponent;
@@ -38,7 +41,28 @@ void AThrowableActor::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPri
 		return;
 	}
 
-	//Three options when hit
+	//three options when hit
+	//if in attached ignore
+	//if not we actor was being pulled or launched
+	//pulled we want to check that the hit is of the actor pulling
+	//in which case it's a successful attach
+
+
+	//if launched and hit a character that is not the launcher
+	//do damage or whatever it is we want
+
+	if (State == EState::Launch)
+	{
+		IInteractInterface* I = Cast<IInteractInterface>(Other);
+		if (I)
+		{
+			I->Execute_ApplyEffect(Other, EffectType, false);
+		}
+	}
+
+	//ignore all other hits
+
+	//this will wait until the projectile comes to a natural stop before returning it to idle
 
 	if (PullActor && State == EState::Pull)
 	{
@@ -163,6 +187,11 @@ void AThrowableActor::Drop()
 void AThrowableActor::ToggleHighlight(bool bIsOn)
 {
 	StaticMeshComponent->SetRenderCustomDepth(bIsOn);
+}
+
+EEffectType AThrowableActor::GetEffectType()
+{
+	return EffectType;
 }
 
 
