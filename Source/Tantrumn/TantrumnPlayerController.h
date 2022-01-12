@@ -7,7 +7,8 @@
 #include "Sound/SoundCue.h"
 #include "TantrumnPlayerController.generated.h"
 
-class ATantrumnGameModeBase;
+class ATantrumnCharacterBase;
+class ATantrumnGameStateBase;
 class UUserWidget;
 
 UCLASS()
@@ -18,8 +19,26 @@ public:
 	virtual void BeginPlay() override;
 	virtual void ReceivedPlayer() override;
 
+
+	virtual void OnPossess(APawn* aPawn) override;
+	virtual void OnUnPossess() override;
+
+	UFUNCTION(Client, Reliable)
+	void ClientDisplayCountdown(float GameCountdownDuration);
+
+	UFUNCTION(Client, Reliable)
+	void ClientRestartGame();
+
+	UFUNCTION(Client, Reliable)
+	void ClientReachedEnd();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRestartLevel();
+
 protected:
 	 void SetupInputComponent() override;
+
+	 bool CanProcessRequest() const;
 
 	 void RequestMoveForward(float AxisValue);
 	 void RequestMoveRight(float AxisValue);
@@ -55,7 +74,8 @@ protected:
 	 UPROPERTY(EditAnywhere, Category = "Sound")
 	 USoundCue* JumpSound = nullptr;
 
-	 ATantrumnGameModeBase* GameModeRef;
+	 UPROPERTY()
+	 ATantrumnGameStateBase* TantrumnGameState;
 
 	 float LastAxis = 0.0f;
 

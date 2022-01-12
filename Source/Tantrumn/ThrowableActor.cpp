@@ -24,12 +24,18 @@ AThrowableActor::AThrowableActor()
 void AThrowableActor::BeginPlay()
 {
 	Super::BeginPlay();
-	ProjectileMovementComponent->OnProjectileStop.AddDynamic(this, &AThrowableActor::ProjectileStop);
+	if (HasAuthority())
+	{
+		ProjectileMovementComponent->OnProjectileStop.AddDynamic(this, &AThrowableActor::ProjectileStop);
+	}
 }
 
 void AThrowableActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	ProjectileMovementComponent->OnProjectileStop.RemoveAll(this);
+	if (HasAuthority())
+	{
+		ProjectileMovementComponent->OnProjectileStop.RemoveDynamic(this, &AThrowableActor::ProjectileStop);
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -40,17 +46,6 @@ void AThrowableActor::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPri
 	{
 		return;
 	}
-
-	//three options when hit
-	//if in attached ignore
-	//if not we actor was being pulled or launched
-	//pulled we want to check that the hit is of the actor pulling
-	//in which case it's a successful attach
-
-
-	//if launched and hit a character that is not the launcher
-	//do damage or whatever it is we want
-
 	if (State == EState::Launch)
 	{
 		IInteractInterface* I = Cast<IInteractInterface>(Other);
@@ -59,11 +54,6 @@ void AThrowableActor::NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPri
 			I->Execute_ApplyEffect(Other, EffectType, false);
 		}
 	}
-
-	//ignore all other hits
-
-	//this will wait until the projectile comes to a natural stop before returning it to idle
-
 	if (PullActor && State == EState::Pull)
 	{
 		if (ATantrumnCharacterBase* TantrumnCharacter = Cast<ATantrumnCharacterBase>(PullActor))
@@ -116,16 +106,6 @@ bool AThrowableActor::SetHomingTarget(AActor* Target)
 
 	return false;
 }
-
-
-
-
-
-// Called every frame
-//void AThrowableActor::Tick(float DeltaTime)
-//{
-//	Super::Tick(DeltaTime);
-//}
 
 bool AThrowableActor::Pull(AActor* InActor)
 {

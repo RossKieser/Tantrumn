@@ -7,15 +7,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "TantrumnGameModeBase.generated.h"
 
-UENUM(BlueprintType)
-enum class EGameState : uint8
-{
-	None UMETA(DisplayName = "None"),
-	Waiting UMETA(DisplayName = "Waiting"),
-	Playing UMETA(DisplayName = "Playing"),
-	Paused UMETA(DisplayName = "Paused"),
-	GameOver UMETA(DisplayName = "GameOver"),
-};
+class AController;
+class ATantrumnPlayerController;
 
 
 UCLASS()
@@ -27,38 +20,22 @@ public:
 	ATantrumnGameModeBase();
 
 	virtual void BeginPlay() override;
+	virtual void RestartPlayer(AController* NewPlayer) override;
 
-	UFUNCTION(BlueprintCallable)
-	EGameState GetCurrentGameState() const;
-
-	void PlayerReachedEnd(APlayerController* PlayerController);
-	void ReceivePlayer(APlayerController* PlayerController);
+	void RestartGame();
 
 private:
-	// --- VARS --- //
-	UFUNCTION(BlueprintCallable, Category = "Game Details")
-	void SetNumExpectedPlayers(uint8 InNumExpectedPlayers) { NumExpectedPlayers = InNumExpectedPlayers; }
-
-	UPROPERTY(EditAnywhere, Category = "Game Details")
-	uint8 NumExpectedPlayers = 1u;
-
-	// Create and set CurrentGameState to NONE. This will be tracked in the code file. 
-	UPROPERTY(VisibleAnywhere, Category = "States")
-	EGameState CurrentGameState = EGameState::None;
-	
-	// Countdown before gameplay state begins. Exposed so we can easily change this in BP editor. 
 	UPROPERTY(EditAnywhere, Category = "Game Details")
 	float GameCountdownDuration = 4.0f;
 
-	FTimerHandle TimerHandle;
 
-	UPROPERTY(EditAnywhere, Category = "Widget")
-	TMap<APlayerController*, UTantrumnGameWidget*> GameWidgets; // Object we'll be creating and adding to the Viewport
+	UFUNCTION(BlueprintCallable, Category = "Game Details")
+	void SetNumExpectedPlayers(uint8 InNumExpectedPlayers) { NumExpectedPlayers = InNumExpectedPlayers; }
 	
-	UPROPERTY(EditAnywhere, Category = "Widget")
-	TSubclassOf<UTantrumnGameWidget> GameWidgetClass; // Exposed class to check the type of widget to display
+	UPROPERTY(EditAnywhere, Category = "Game Details")
+	uint8 NumExpectedPlayers = 1u;
 
-	APlayerController* PC = nullptr;
+	FTimerHandle TimerHandle;
 
 	// --- FUNCTIONS --- //
 
