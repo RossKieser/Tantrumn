@@ -89,12 +89,12 @@ void ATantrumnCharacterBase::BeginPlay()
 	
 }
 
-void ATantrumnCharacterBase::ServerSprintStart()
+void ATantrumnCharacterBase::ServerSprintStart_Implementation()
 {
 	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 }
 
-void ATantrumnCharacterBase::ServerSprintEnd()
+void ATantrumnCharacterBase::ServerSprintEnd_Implementation()
 {
 	GetCharacterMovement()->MaxWalkSpeed = MaxWalkSpeed;
 }

@@ -59,7 +59,7 @@ void ATantrumnGameStateBase::OnRep_GameState(const EGameState& OldGameState)
 	UE_LOG(LogTemp, Warning, TEXT("GameState: %s"), *UEnum::GetDisplayValueAsText(GameState).ToString());
 }
 
-void ClearResults()
+void ATantrumnGameStateBase::ClearResults()
 {
-	//Results.Empty();
+	Results.Empty();
 }

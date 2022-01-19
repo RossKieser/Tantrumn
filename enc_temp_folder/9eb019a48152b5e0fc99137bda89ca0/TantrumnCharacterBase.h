@@ -59,9 +59,6 @@ public:
 	bool IsPullingObject() const { return CharacterThrowState == ECharacterThrowState::RequestingPull || CharacterThrowState == ECharacterThrowState::Pulling; }
 
 	UFUNCTION(BlueprintPure)
-	bool IsThrowing() const { return CharacterThrowState == ECharacterThrowState::Throwing; }
-
-	UFUNCTION(BlueprintPure)
 	ECharacterThrowState GetCharacterThrowState() const { return CharacterThrowState; }
 
 	UFUNCTION(BlueprintPure)
