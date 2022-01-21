@@ -151,10 +151,10 @@ bool ATantrumnPlayerController::CanProcessRequest() const
 
 void ATantrumnPlayerController::RequestMoveForward(float AxisValue)
 {
-	//if (!CanProcessRequest())
-	//{
-	//	return;
-	//}
+	if (!CanProcessRequest())
+	{
+		return;
+	}
 	if (AxisValue != 0.f)
 	{
 		FRotator const ControlSpaceRot = GetControlRotation();
