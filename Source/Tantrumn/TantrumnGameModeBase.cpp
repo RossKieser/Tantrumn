@@ -5,9 +5,19 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TantrumnGameInstance.h"
+
+// Copyright Epic Games, Inc. All Rights Reserved.
+#include "TantrumnGameModeBase.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "TantrumnGameInstance.h"
 #include "TantrumnGameStateBase.h"
 #include "TantrumnPlayerController.h"
 #include "TantrumnPlayerState.h"
+#include "TantrumnAIController.h"
+
+
 
 ATantrumnGameModeBase::ATantrumnGameModeBase()
 {
@@ -44,6 +54,14 @@ void ATantrumnGameModeBase::RestartPlayer(AController* NewPlayer)
 
 void ATantrumnGameModeBase::RestartGame()
 {
+	for (FConstControllerIterator Iterator = GetWorld()->GetControllerIterator(); Iterator; ++Iterator)
+	{
+		ATantrumnAIController* TantrumnAIController = Cast<ATantrumnAIController>(Iterator->Get());
+		if (TantrumnAIController && TantrumnAIController->GetPawn())
+		{
+			TantrumnAIController->Destroy(true);
+		}
+	}
 	ResetLevel();
 	//RestartGame();
 	//GetWorld()->ServerTravel(TEXT("?Restart"), false);
@@ -108,7 +126,6 @@ void ATantrumnGameModeBase::StartGame()
 		TantrumnGameState->SetGameState(EGameState::Playing);
 		TantrumnGameState->ClearResults();
 	}
-
 	for (FConstPlayerControllerIterator Iterator = GetWorld()->GetPlayerControllerIterator(); Iterator; ++Iterator)
 	{
 		APlayerController* PlayerController = Iterator->Get();
@@ -119,7 +136,6 @@ void ATantrumnGameModeBase::StartGame()
 			FInputModeGameOnly InputMode;
 			PlayerController->SetInputMode(InputMode);
 			PlayerController->SetShowMouseCursor(false);
-
 			ATantrumnPlayerState* PlayerState = PlayerController->GetPlayerState<ATantrumnPlayerState>();
 			if (PlayerState)
 			{
@@ -128,6 +144,23 @@ void ATantrumnGameModeBase::StartGame()
 			}
 		}
 	}
+
+	for (FConstControllerIterator Iterator = GetWorld()->GetControllerIterator(); Iterator; ++Iterator)
+	{
+		ATantrumnAIController* TantrumnAIController = Cast<ATantrumnAIController>(Iterator->Get());
+		if (TantrumnAIController)
+		{
+			ATantrumnPlayerState* PlayerState = TantrumnAIController->GetPlayerState<ATantrumnPlayerState>();
+			if (PlayerState)
+			{
+				PlayerState->SetCurrentState(EPlayerGameState::Playing);
+				PlayerState->SetIsWinner(false);
+			}
+		}
+	}
+
 }
+
+
 
 
