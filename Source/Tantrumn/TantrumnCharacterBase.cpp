@@ -170,30 +170,32 @@ void ATantrumnCharacterBase::LineCastActorTransform()
 	ProcessTraceResult(HitResult);
 }
 
-void ATantrumnCharacterBase::ProcessTraceResult(const FHitResult& HitResult)
+void ATantrumnCharacterBase::ProcessTraceResult(const FHitResult& HitResult, bool bHighlight /* = true */)
 {
 	//check if there was an existing throwable actor
 	//remove the hightlight to avoid wrong feedback 
 	AThrowableActor* HitThrowableActor = HitResult.bBlockingHit ? Cast<AThrowableActor>(HitResult.GetActor()) : nullptr;
 	const bool IsSameActor = (ThrowableActor == HitThrowableActor);
 	const bool IsValidTarget = HitThrowableActor && HitThrowableActor->IsIdle();
-
 	//clean up old actor
 	if (ThrowableActor && (!IsValidTarget || !IsSameActor))
 	{
 		ThrowableActor->ToggleHighlight(false);
 		ThrowableActor = nullptr;
 	}
-
+	//no target, early out
 	if (!IsValidTarget)
 	{
 		return;
 	}
-	
+	//new target, set the variable and proceed
 	if (!IsSameActor)
 	{
 		ThrowableActor = HitThrowableActor;
-		ThrowableActor->ToggleHighlight(true);
+		if (bHighlight)
+		{
+			ThrowableActor->ToggleHighlight(true);
+		}
 	}
 
 	if (CharacterThrowState == ECharacterThrowState::RequestingPull)
@@ -202,9 +204,8 @@ void ATantrumnCharacterBase::ProcessTraceResult(const FHitResult& HitResult)
 		if (GetVelocity().SizeSquared() < 100.0f)
 		{
 			ServerPullObject(ThrowableActor);
-			//PullObject(ThrowableActor);
+			CharacterThrowState = ECharacterThrowState::Pulling;
 			ThrowableActor->ToggleHighlight(false);
-			//ThrowableActor = nullptr;
 		}
 	}
 }
@@ -417,6 +418,8 @@ void ATantrumnCharacterBase::OnNotifyEndReceived(FName NotifyName, const FBranch
 void ATantrumnCharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	//this is done on the clients to ensure the anim looks correct
+	//no need to spam network traffic with curve value
 	if (CharacterThrowState == ECharacterThrowState::Throwing)
 	{
 		UpdateThrowMontagePlayRate();
@@ -431,6 +434,7 @@ void ATantrumnCharacterBase::Tick(float DeltaTime)
 	{
 		return;
 	}
+	//these should run on the authority to prevent cheating
 	if (bIsStunned)
 	{
 		UpdateStun(DeltaTime);
@@ -441,8 +445,10 @@ void ATantrumnCharacterBase::Tick(float DeltaTime)
 		UpdateEffect(DeltaTime);
 		return;
 	}
-
-	else if (CharacterThrowState == ECharacterThrowState::None || CharacterThrowState == ECharacterThrowState::RequestingPull)
+	//~move to authority, and place the start as a server rpc
+	//move to a function and improve this in the future
+	//only locallly controlled character needs to worry about below code
+	if (CharacterThrowState == ECharacterThrowState::None || CharacterThrowState == ECharacterThrowState::RequestingPull)
 	{
 		switch (CVarTraceMode->GetInt())
 		{
@@ -604,6 +610,34 @@ void ATantrumnCharacterBase::OnThrowableAttached(AThrowableActor* InThrowableAct
 	ThrowableActor = InThrowableActor;
 	MoveIgnoreActorAdd(ThrowableActor);
 	ClientThrowableAttached(InThrowableActor);
+}
+
+bool ATantrumnCharacterBase::AttemptPullObjectAtLocation(const FVector& InLocation)
+{
+	if (CharacterThrowState != ECharacterThrowState::None && CharacterThrowState != ECharacterThrowState::RequestingPull)
+	{
+		return false;
+	}
+
+	FVector StartPos = GetActorLocation();
+	FVector EndPos = InLocation;
+	FHitResult HitResult;
+	GetWorld() ? GetWorld()->LineTraceSingleByChannel(HitResult, StartPos, EndPos, ECollisionChannel::ECC_Visibility) : false;
+#if ENABLE_DRAW_DEBUG
+	if (CVarDisplayTrace->GetBool())
+	{
+		DrawDebugLine(GetWorld(), StartPos, EndPos, HitResult.bBlockingHit ? FColor::Red : FColor::White, false);
+	}
+#endif
+	CharacterThrowState = ECharacterThrowState::RequestingPull;
+	ProcessTraceResult(HitResult, false);
+	if (CharacterThrowState == ECharacterThrowState::Pulling)
+	{
+		return true;
+	}
+
+	CharacterThrowState = ECharacterThrowState::None;
+	return false;
 }
 
 
