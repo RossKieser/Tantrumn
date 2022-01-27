@@ -131,8 +131,8 @@ void ATantrumnPlayerController::SetupInputComponent()
 		InputComponent->BindAction(TEXT("Sprint"), EInputEvent::IE_Pressed, this, &ATantrumnPlayerController::RequestSprintStart);
 		InputComponent->BindAction(TEXT("Sprint"), EInputEvent::IE_Released, this, &ATantrumnPlayerController::RequestSprintEnd);
 
-		InputComponent->BindAction(TEXT("PullObject"), EInputEvent::IE_Pressed, this, &ATantrumnPlayerController::RequestPullObject);
-		InputComponent->BindAction(TEXT("PullObject"), EInputEvent::IE_Released, this, &ATantrumnPlayerController::RequestStopPullObject);
+		InputComponent->BindAction(TEXT("PullorAimObject"), EInputEvent::IE_Pressed, this, &ATantrumnPlayerController::RequestPullorAimObject);
+		InputComponent->BindAction(TEXT("PullorAimObject"), EInputEvent::IE_Released, this, &ATantrumnPlayerController::RequestStopPullorAimObject);
 	}
 }
 
@@ -228,25 +228,43 @@ void ATantrumnPlayerController::RequestThrowObject(float AxisValue)
 	}
 }
 
-void ATantrumnPlayerController::RequestPullObject()
+void ATantrumnPlayerController::RequestPullorAimObject()
 {
 	if (!CanProcessRequest())
 	{
 		return;
 	}
+
 	if (ATantrumnCharacterBase* TantrumnCharacterBase = Cast<ATantrumnCharacterBase>(GetCharacter()))
 	{
-		TantrumnCharacterBase->RequestPullObject();
+		if (TantrumnCharacterBase->CanAim())
+		{
+			TantrumnCharacterBase->RequestAim();
+		}
+		else
+		{
+			TantrumnCharacterBase->RequestPullObject();
+		}
+
 	}
 }
 
-void ATantrumnPlayerController::RequestStopPullObject()
+void ATantrumnPlayerController::RequestStopPullorAimObject()
 {
 	if (ATantrumnCharacterBase* TantrumnCharacterBase = Cast<ATantrumnCharacterBase>(GetCharacter()))
 	{
-		TantrumnCharacterBase->RequestStopPullObject();
+		if (TantrumnCharacterBase->IsAiming())
+		{
+			TantrumnCharacterBase->RequestStopAim();
+		}
+		else
+		{
+			TantrumnCharacterBase->RequestStopPullObject();
+		}
+
 	}
 }
+
 
 
 void ATantrumnPlayerController::RequestJump()
